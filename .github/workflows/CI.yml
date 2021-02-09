@@ -1,0 +1,65 @@
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+        - 3.6
+        - 3.7
+        - 3.8
+        - 3.9
+        os:
+        - ubuntu-latest
+        - macos-latest
+        - windows-latest
+        arch: [x64]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov
+        pip install -e .
+
+    - name: Run Unit Tests
+      run: |
+        pytest --cov=pkgjogger --cov-report xml
+      env:
+        GITHUB_API: ${{ secrets.GH_API_TESTING }}
+
+    - name: Submit coverage report for job
+      if: ${{ always() }}
+      run: |
+        python -m pip install --upgrade coveralls
+        coveralls -v --service=github
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COVERALLS_FLAG_NAME: ${{ github.job }}
+        COVERALLS_PARALLEL: true
+        COVERALLS_SERVICE_NAME: github-actions
+
+  coveralls:
+    name: Indicate completion to coveralls.io
+    needs: test
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    container: python:3-slim
+    steps:
+    - run: |
+        pip3 install --upgrade coveralls
+        coveralls -v --finish
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COVERALLS_SERVICE_NAME: github-actions
